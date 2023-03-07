@@ -14,6 +14,7 @@ if sys.version_info >= (3, 9):
 if sys.version_info >= (3, 11):
     TERMINAL_OPCODES.add(dis.opmap["JUMP_BACKWARD"])
     TERMINAL_OPCODES.add(dis.opmap["JUMP_BACKWARD_NO_INTERRUPT"])
+    print("HERE TEST CI")
 else:
     TERMINAL_OPCODES.add(dis.opmap["JUMP_ABSOLUTE"])
 JUMP_OPCODES = set(dis.hasjrel + dis.hasjabs)
@@ -60,6 +61,8 @@ def remove_pointless_jumps(instructions):
         for a, b in zip(instructions, instructions[1:])
         if is_uncond(a) and a.target is b
     }
+    print("remove_pointless_jumps")
+    print(pointless_jumps)
     return [inst for inst in instructions if id(inst) not in pointless_jumps]
 
 
