@@ -1,23 +1,23 @@
 #define TORCH_ASSERT_ONLY_METHOD_OPERATORS
-#include <ATen/core/Tensor.h>
 #include <ATen/Context.h>
 #include <ATen/Dispatch.h>
 #include <ATen/ExpandUtils.h>
 #include <ATen/NamedTensorUtils.h>
 #include <ATen/OpMathType.h>
-#include <ATen/native/mkldnn/Matmul.h>
+#include <ATen/Parallel.h>
+#include <ATen/TensorIndexing.h>
+#include <ATen/TensorIterator.h>
+#include <ATen/TensorOperators.h>
+#include <ATen/TensorSubclassLikeUtils.h>
+#include <ATen/TensorUtils.h>
+#include <ATen/core/Tensor.h>
 #include <ATen/native/CPUBlas.h>
 #include <ATen/native/LinearAlgebra.h>
 #include <ATen/native/LinearAlgebraUtils.h>
 #include <ATen/native/ReduceOps.h>
 #include <ATen/native/ReduceOpsUtils.h>
 #include <ATen/native/Resize.h>
-#include <ATen/Parallel.h>
-#include <ATen/TensorIndexing.h>
-#include <ATen/TensorIterator.h>
-#include <ATen/TensorOperators.h>
-#include <ATen/TensorUtils.h>
-#include <ATen/TensorSubclassLikeUtils.h>
+#include <ATen/native/mkldnn/Matmul.h>
 #include <c10/util/accumulate.h>
 #include <c10/util/irange.h>
 #include <c10/util/variant.h>
@@ -1541,6 +1541,7 @@ inline void baddbmm_cpu_kernel(const Tensor& result, const Tensor& self, const T
   auto m0 = mat2.accessor<scalar_t, 3>();
 
   int64_t grain_size = std::min(internal::GRAIN_SIZE / (is * js * ks), (int64_t)1);
+  using opmath_t = at::opmath_type<scalar_t>;
   parallel_for(0, bs, grain_size, [&](int64_t b_begin, int64_t b_end) {
       for (const auto b : c10::irange(b_begin, b_end)) {
         auto r1 = r0[b];
@@ -1550,18 +1551,20 @@ inline void baddbmm_cpu_kernel(const Tensor& result, const Tensor& self, const T
           auto r2 = r1[i];
           auto s2 = s1[i];
           for (const auto j : c10::irange(js)) {
-            scalar_t &r = r2[j];
+            opmath_t acc_value = r2[j];
+            scalar_t& r = r2[j];
             if (is_bmm) {
-              r = 0;
+              acc_value = 0;
               for (const auto k : c10::irange(ks)) {
-                r += s2[k] * m1[k][j];
+                acc_value += s2[k] * m1[k][j];
               }
             } else {
-              r *= beta;
+              acc_value *= beta;
               for (const auto k : c10::irange(ks)) {
-                r += alpha * s2[k] * m1[k][j];
+                acc_value += alpha * s2[k] * m1[k][j];
               }
             }
+            r = acc_value;
           }
         }
       }
